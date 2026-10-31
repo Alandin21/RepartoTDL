@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d6b5d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mi ruta">
+<meta name="robots" content="noindex, nofollow">
+<title>Ruta del chofer</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+/* Layout: una sola columna pensada para el celular; barra superior fija con GPS y avance, tarjeta de la parada actual y lista de paradas. */
+:root {
+  --bg: #eef2f1;
+  --panel: #ffffff;
+  --ink: #14201d;
+  --muted: #5a6a66;
+  --line: #d6dedb;
+  --field: #f5f8f7;
+  --accent: #0d6b5d;
+  --accent-ink: #ffffff;
+  --good: #17803d;
+  --warn: #a35f00;
+  --bad: #b3261e;
+  --good-bg: #e3f4e8;
+  --warn-bg: #fdf0d6;
+  --bad-bg: #fbe4e1;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1312; --panel: #151c1b; --ink: #e6efec; --muted: #94a5a0; --line: #263230; --field: #1b2423;
+    --accent: #3fc1ad; --accent-ink: #072620; --good: #5fd18a; --warn: #f0b252; --bad: #ff8a80;
+    --good-bg: #14301f; --warn-bg: #33270f; --bad-bg: #3a1815; color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.4 var(--font); min-height: 100vh;
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px)); }
+button { font: inherit; color: inherit; border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 12px 14px; min-height: 48px; cursor: pointer; }
+button:active { transform: scale(.98); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button.ok { background: var(--good); color: #fff; border-color: var(--good); font-weight: 600; }
+button.ghost { background: transparent; }
+button:disabled { opacity: .5; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+input { font: inherit; color: inherit; background: var(--field); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; width: 100%; min-height: 48px; }
+.wrap { padding-left: max(14px, env(safe-area-inset-left, 0px)); padding-right: max(14px, env(safe-area-inset-right, 0px)); max-width: 640px; margin: 0 auto; }
+.mono { font-family: var(--mono); }
+.muted { color: var(--muted); }
+.note { color: var(--muted); font-size: 14px; margin: 8px 0 0; }
+
+.top { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line);
+  padding-top: max(10px, env(safe-area-inset-top, 0px)); padding-bottom: 10px; }
+.top .l1 { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.top h1 { font-size: 17px; margin: 0; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 600; border: 1px solid var(--line); background: var(--field); min-height: 36px; }
+.chip.good { background: var(--good-bg); color: var(--good); border-color: transparent; }
+.chip.warn { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
+.chip.bad { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+.prog { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 10px; display: flex; }
+.prog i { display: block; height: 100%; }
+.prog .a { background: var(--good); } .prog .b { background: var(--bad); }
+.cnt { display: flex; gap: 14px; margin-top: 6px; font-size: 14px; color: var(--muted); flex-wrap: wrap; }
+.cnt b { color: var(--ink); }
+.sync { font-size: 13px; color: var(--muted); margin-top: 4px; min-height: 18px; }
+.sync.bad { color: var(--warn); font-weight: 600; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin-top: 14px; }
+.cur .n { font: 600 13px var(--mono); color: var(--accent); text-transform: uppercase; letter-spacing: .06em; }
+.cur h2 { font-size: 22px; margin: 4px 0 2px; overflow-wrap: anywhere; }
+.cur .addr { font-size: 16px; overflow-wrap: anywhere; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; font-size: 15px; }
+.facts span { color: var(--muted); } .facts b { color: var(--ink); font-weight: 600; }
+.acts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.acts .full { grid-column: 1 / -1; }
+.prox { margin-top: 12px; padding: 12px; border-radius: 12px; background: var(--good-bg); color: var(--good); font-weight: 600; }
+.reasons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.reasons button { min-height: 44px; font-size: 15px; }
+.nav2 { display: flex; justify-content: space-between; margin-top: 10px; }
+.nav2 button { min-height: 40px; padding: 8px 12px; font-size: 14px; }
+
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 18px; }
+.tabs button { min-height: 44px; }
+.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.row { display: grid; grid-template-columns: 38px 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
+.row.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+.row .o { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font: 600 13px var(--mono); background: var(--field); border: 1px solid var(--line); }
+.row.ok .o { background: var(--good-bg); color: var(--good); border-color: transparent; }
+.row.no .o { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
+.row .t { min-width: 0; }
+.row .t b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .t small { display: block; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .d { font: 500 13px var(--mono); color: var(--muted); text-align: right; white-space: nowrap; }
+
+.foot { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+.foot .full { grid-column: 1 / -1; }
+
+.center { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; gap: 12px; padding-top: 24px; padding-bottom: 24px; }
+.center h1 { font-size: 24px; margin: 0; }
+.err { color: var(--bad); font-weight: 600; min-height: 22px; }
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: end center; z-index: 20; padding: 12px; }
+.modal .box { background: var(--panel); border-radius: 16px; padding: 18px; width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 10px; }
+.modal h3 { margin: 0; font-size: 18px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal" class="modal" hidden></div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (s) { return document.querySelector(s); };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  // ----- Ruta del chofer dentro de un enlace: comprimida y, si se pone PIN, cifrada (AES-GCM) -----
+  function b64uEnc(bytes) {
+    var s = '', i;
+    for (i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function b64uDec(str) {
+    str = String(str).replace(/-/g, '+').replace(/_/g, '/');
+    while (str.length % 4) str += '=';
+    var bin = atob(str), a = new Uint8Array(bin.length), i;
+    for (i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+    return a;
+  }
+  async function deflateBytes(bytes) {
+    var cs = new CompressionStream('deflate-raw'), w = cs.writable.getWriter();
+    w.write(bytes); w.close();
+    return new Uint8Array(await new Response(cs.readable).arrayBuffer());
+  }
+  async function inflateBytes(bytes) {
+    var ds = new DecompressionStream('deflate-raw'), w = ds.writable.getWriter();
+    w.write(bytes); w.close();
+    return new Uint8Array(await new Response(ds.readable).arrayBuffer());
+  }
+  async function deriveKey(pin, salt) {
+    var base = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(pin)), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: 150000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  // flags: bit0 = cifrado, bit1 = comprimido
+  async function packRoute(obj, pin) {
+    var body = new TextEncoder().encode(JSON.stringify(obj)), flags = 0;
+    if (typeof CompressionStream !== 'undefined') { body = await deflateBytes(body); flags |= 2; }
+    if (pin) {
+      var salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+      var key = await deriveKey(pin, salt);
+      var ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, body));
+      var out = new Uint8Array(29 + ct.length);
+      out[0] = flags | 1; out.set(salt, 1); out.set(iv, 17); out.set(ct, 29);
+      return b64uEnc(out);
+    }
+    var o2 = new Uint8Array(1 + body.length);
+    o2[0] = flags; o2.set(body, 1);
+    return b64uEnc(o2);
+  }
+  function packIsEncrypted(str) { return !!(b64uDec(str)[0] & 1); }
+  async function unpackRoute(str, pin) {
+    var b = b64uDec(str), flags = b[0], body;
+    if (flags & 1) {
+      if (!pin) throw new Error('pin');
+      var salt = b.slice(1, 17), iv = b.slice(17, 29), ct = b.slice(29), key = await deriveKey(pin, salt);
+      try { body = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, ct)); }
+      catch (e) { throw new Error('pin'); }
+    } else body = b.slice(1);
+    if (flags & 2) body = await inflateBytes(body);
+    return JSON.parse(new TextDecoder().decode(body));
+  }
+
+
+  function hav(a, b) {
+    var R = 6371000, r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+    var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(x)));
+  }
+  function fmtDist(m) { return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(m < 10000 ? 1 : 0) + ' km'; }
+  function clock(sec) { sec = Math.round(sec); return pad(Math.floor(sec / 3600) % 24) + ':' + pad(Math.floor((sec % 3600) / 60)); }
+  function today() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+
+  // ---------- Estado guardado en el teléfono ----------
+  var KEY = 'ruta_chofer_v1';
+  var S = { route: null, status: {}, cur: 0, tab: 'pend', pos: null, gps: 'off', watch: null, wake: null, hashData: null, askNo: false, storeOk: true,
+    cfg: null, queue: [], lastSync: 0, syncErr: '', lastPosSent: null };
+  function load() {
+    try {
+      var j = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (j && j.route) { S.route = j.route; S.status = j.status || {}; S.cur = j.cur || 0; S.cfg = j.cfg || null; S.queue = j.q || []; S.lastSync = j.ls || 0; }
+    } catch (e) { S.storeOk = false; }
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify({ route: S.route, status: S.status, cur: S.cur, cfg: S.cfg, q: S.queue, ls: S.lastSync })); } catch (e) { S.storeOk = false; }
+  }
+  function stop(i) { var a = S.route.s[i]; return { id: a[0], cliente: a[1], dir: a[2], lat: a[3], lon: a[4], arr: a[5], notas: a[6], i: i }; }
+  function counts() {
+    var ok = 0, no = 0, n = S.route.s.length;
+    for (var i = 0; i < n; i++) { var st = S.status[i]; if (st) { if (st.st === 'ok') ok++; else no++; } }
+    return { ok: ok, no: no, pend: n - ok - no, n: n };
+  }
+  function nextPending(from) {
+    var n = S.route.s.length, i;
+    for (i = from; i < n; i++) if (!S.status[i]) return i;
+    for (i = 0; i < from; i++) if (!S.status[i]) return i;
+    return -1;
+  }
+
+  // ---------- Pantallas ----------
+  function view(html) { $('#app').innerHTML = html; }
+  function showEmpty(msg) {
+    view('<div class="wrap center"><h1>Mi ruta del día</h1><p class="muted">' + (msg || 'Abre el enlace que te mandó tu supervisor para cargar tu ruta. Se guarda en tu teléfono y funciona sin señal.') + '</p></div>');
+  }
+  function showPin(err) {
+    view('<div class="wrap center"><h1>Ruta protegida</h1><p class="muted">Escribe el PIN que te dio tu supervisor.</p>' +
+      '<input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" aria-label="PIN"><div class="err" id="perr">' + esc(err || '') + '</div>' +
+      '<button class="primary" id="pinGo">Abrir mi ruta</button></div>');
+    $('#pinGo').addEventListener('click', openWithPin);
+    $('#pin').addEventListener('keydown', function (e) { if (e.key === 'Enter') openWithPin(); });
+    $('#pin').focus();
+  }
+  async function openWithPin() {
+    var pin = $('#pin').value.trim();
+    if (!pin) { $('#perr').textContent = 'Escribe tu PIN.'; return; }
+    $('#pinGo').disabled = true; $('#perr').textContent = '';
+    try { var r = await unpackRoute(S.hashData, pin); acceptRoute(r); }
+    catch (e) { $('#pinGo').disabled = false; $('#perr').textContent = 'PIN incorrecto. Inténtalo de nuevo.'; $('#pin').select(); }
+  }
+  function acceptRoute(r) {
+    if (!r || !r.s || !r.s.length) { showEmpty('El enlace no trae una ruta válida. Pide uno nuevo a tu supervisor.'); return; }
+    S.cfg = null; S.queue = [];
+    var hadProgress = S.route && Object.keys(S.status).length > 0;
+    var same = S.route && S.route.c === r.c && S.route.d === r.d;
+    S.hashData = null;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* sin historial */ }
+    if (hadProgress && !same) {
+      var box = $('#modal'); box.hidden = false;
+      box.innerHTML = '<div class="box"><h3>Ya tienes una ruta en curso</h3><p class="muted">Tienes la ruta ' + esc(S.route.c) + ' con avance. ¿Reemplazarla por ' + esc(r.c) + '? El avance de la ruta actual se perderá.</p>' +
+        '<button class="primary" id="mRep">Reemplazar</button><button id="mKeep">Conservar la actual</button></div>';
+      $('#mRep').addEventListener('click', function () { box.hidden = true; setRoute(r); });
+      $('#mKeep').addEventListener('click', function () { box.hidden = true; render(); });
+      return;
+    }
+    if (same && hadProgress) { render(); return; }
+    setRoute(r);
+  }
+  function setRoute(r) {
+    S.route = r; S.status = {}; S.cur = 0; S.askNo = false;
+    var n = nextPending(0); S.cur = n < 0 ? 0 : n;
+    save(); render();
+  }
+
+  function render() {
+    if (!S.route) { showEmpty(); return; }
+    var c = counts(), r = S.route, finished = c.pend === 0;
+    var cur = S.cur >= 0 && S.cur < c.n ? stop(S.cur) : null;
+    var pctOk = c.ok / c.n * 100, pctNo = c.no / c.n * 100;
+    var old = r.d && r.d !== today() ? '<div class="card" style="border-color:var(--warn)"><b style="color:var(--warn)">Esta ruta es del ' + esc(r.d) + '.</b> Confirma con tu supervisor que sea la de hoy.</div>' : '';
+    var h = '<div class="top"><div class="wrap"><div class="l1"><h1>' + esc(r.c) + ' · ' + (r.veh === 'moto' ? 'Moto' : 'Auto') + '</h1><button class="chip" id="gpsChip" aria-live="polite"></button></div>' +
+      '<div class="prog" aria-hidden="true"><i class="a" style="width:' + pctOk + '%"></i><i class="b" style="width:' + pctNo + '%"></i></div>' +
+      '<div class="cnt"><span><b>' + c.ok + '</b> entregados</span><span><b>' + c.no + '</b> no entregados</span><span><b>' + c.pend + '</b> pendientes</span></div><div class="sync" id="sync"></div></div></div>' +
+      '<div class="wrap">' + old + (S.storeOk ? '' : '<div class="card" style="border-color:var(--warn)">Tu navegador no deja guardar el avance. No cierres esta pantalla.</div>');
+    if (finished) {
+      h += '<div class="card"><h2 style="margin:0 0 6px">Ruta terminada</h2><p class="muted" style="margin:0">Comparte tu avance con tu supervisor y regresa a ' + esc(r.hub || 'la bodega') + '.</p>' +
+        '<div class="acts"><button class="primary full" id="bShare">Compartir avance</button><button class="full" id="bHub">Navegar a la bodega</button></div></div>';
+    } else if (cur) {
+      var st = S.status[cur.i];
+      h += '<div class="card cur"><div class="n">Parada ' + (cur.i + 1) + ' de ' + c.n + (st ? ' · ya marcada' : '') + '</div><h2>' + esc(cur.cliente || cur.id) + '</h2><div class="addr">' + esc(cur.dir || '') + '</div>' +
+        '<div class="facts"><div><span>Paquete </span><b class="mono">' + esc(cur.id) + '</b></div><div><span>Llegada estimada </span><b class="mono">' + clock(cur.arr) + '</b></div><div id="curDist"></div></div>' +
+        (cur.notas ? '<div class="facts"><div><span>Nota </span><b>' + esc(cur.notas) + '</b></div></div>' : '') +
+        '<div id="prox"></div>' +
+        '<div class="acts"><button class="primary full" id="bNav">Navegar a esta parada</button>' +
+        '<button class="ok" id="bOk">Entregado</button><button id="bNo">No entregado</button></div>' +
+        (S.askNo ? '<div class="reasons" id="reasons">' + ['Cliente ausente', 'Dirección incorrecta', 'Rechazó el paquete', 'Sin acceso', 'Otro'].map(function (x) { return '<button data-why="' + x + '">' + x + '</button>'; }).join('') + '</div>' : '') +
+        '<div class="nav2"><button class="ghost" id="bPrev">&larr; Anterior</button><button class="ghost" id="bMulti">Navegar las siguientes 10</button><button class="ghost" id="bSkip">Saltar &rarr;</button></div></div>';
+    }
+    h += '<div class="tabs" role="tablist"><button role="tab" data-tab="pend" aria-selected="' + (S.tab === 'pend') + '">Pendientes (' + c.pend + ')</button><button role="tab" data-tab="done" aria-selected="' + (S.tab === 'done') + '">Hechas (' + (c.ok + c.no) + ')</button></div>';
+    h += '<ul class="list" id="list">';
+    var shown = 0;
+    for (var i = 0; i < c.n; i++) {
+      var s = stop(i), stt = S.status[i];
+      if ((S.tab === 'pend') === !!stt) continue;
+      shown++;
+      h += '<li class="row ' + (stt ? stt.st : '') + (i === S.cur ? ' sel' : '') + '" data-i="' + i + '" tabindex="0"><span class="o">' + (stt ? (stt.st === 'ok' ? '&#10003;' : '&#10005;') : (i + 1)) + '</span>' +
+        '<span class="t"><b>' + esc(s.cliente || s.id) + '</b><small>' + esc(s.dir || s.id) + '</small></span><span class="d" data-d="' + i + '"></span></li>';
+    }
+    if (!shown) h += '<li class="muted" style="padding:10px 2px">' + (S.tab === 'pend' ? 'No quedan paradas pendientes.' : 'Aún no marcas ninguna parada.') + '</li>';
+    h += '</ul><div class="foot"><button id="fShare">Compartir avance</button><button id="fLoc">Copiar mi ubicación</button><button class="ghost full" id="fReset">Reiniciar ruta</button></div>' +
+      '<p class="note">Ruta ' + esc(r.c) + ' · sale de ' + esc(r.hub || 'la bodega') + ' a las ' + clock(r.sal || 0) + '. Las distancias son en línea recta.</p></div>';
+    view(h);
+    bind(); updateLive();
+  }
+
+  function bind() {
+    var q = function (id, fn) { var e = document.getElementById(id); if (e) e.addEventListener('click', fn); };
+    q('gpsChip', function () { startGps(true); });
+    q('bNav', function () { var s = stop(S.cur); openMaps(mapsDest([s])); });
+    q('bMulti', function () { openMaps(mapsDest(upcoming(10))); });
+    q('bOk', function () { mark('ok', ''); });
+    q('bNo', function () { S.askNo = !S.askNo; render(); });
+    q('bPrev', function () { S.cur = Math.max(0, S.cur - 1); S.askNo = false; save(); render(); });
+    q('bSkip', function () { var n = nextPending(S.cur + 1); if (n >= 0) S.cur = n; S.askNo = false; save(); render(); });
+    q('bShare', function () { shareReport(); });
+    q('fShare', function () { shareReport(); });
+    q('bHub', function () { var r = S.route; openMaps('https://www.google.com/maps/dir/?api=1&destination=' + r.hubLL[0] + ',' + r.hubLL[1] + '&travelmode=' + tm()); });
+    q('fLoc', copyLoc);
+    q('fReset', confirmReset);
+    document.querySelectorAll('[data-why]').forEach(function (b) { b.addEventListener('click', function () { mark('no', b.getAttribute('data-why')); }); });
+    document.querySelectorAll('[data-tab]').forEach(function (b) { b.addEventListener('click', function () { S.tab = b.getAttribute('data-tab'); render(); }); });
+    document.querySelectorAll('.row').forEach(function (row) {
+      function pick() { S.cur = +row.getAttribute('data-i'); S.askNo = false; save(); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+      row.addEventListener('click', pick);
+      row.addEventListener('keydown', function (e) { if (e.key === 'Enter') pick(); });
+    });
+  }
+
+  // ---------- Marcar entregas ----------
+  function mark(kind, why) {
+    var p = S.pos;
+    S.status[S.cur] = { st: kind, why: why || '', t: Date.now(), lat: p ? p.lat : null, lon: p ? p.lon : null, acc: p ? Math.round(p.acc) : null };
+    if (S.cfg) S.queue.push({ i: S.cur, st: kind, why: why || '', t: S.status[S.cur].t, lat: S.status[S.cur].lat, lon: S.status[S.cur].lon, acc: S.status[S.cur].acc });
+    S.askNo = false;
+    var n = nextPending(S.cur + 1);
+    if (n >= 0) S.cur = n;
+    save(); render(); window.scrollTo({ top: 0 });
+    flush(true);
+    if (navigator.vibrate) try { navigator.vibrate(40); } catch (e) { /* sin vibración */ }
+  }
+  function confirmReset() {
+    var box = $('#modal'); box.hidden = false;
+    box.innerHTML = '<div class="box"><h3>¿Reiniciar la ruta?</h3><p class="muted">Se borra lo que marcaste como entregado o no entregado. Las paradas vuelven a quedar pendientes.</p>' +
+      '<button class="primary" id="mYes">Sí, reiniciar</button><button id="mNo">Cancelar</button></div>';
+    $('#mYes').addEventListener('click', function () { S.status = {}; S.cur = 0; S.askNo = false; save(); box.hidden = true; render(); });
+    $('#mNo').addEventListener('click', function () { box.hidden = true; });
+  }
+
+  // ---------- Navegación con Google Maps ----------
+  function tm() { return S.route && S.route.veh === 'moto' ? 'two-wheeler' : 'driving'; }
+  function upcoming(n) {
+    var out = [], c = S.route.s.length;
+    for (var k = 0; k < c && out.length < n; k++) { var i = (S.cur + k) % c; if (!S.status[i]) out.push(stop(i)); }
+    return out;
+  }
+  function mapsDest(list) {
+    var last = list[list.length - 1], u = 'https://www.google.com/maps/dir/?api=1&destination=' + last.lat + ',' + last.lon;
+    if (list.length > 1) u += '&waypoints=' + list.slice(0, -1).map(function (p) { return encodeURIComponent(p.lat + ',' + p.lon); }).join('%7C');
+    return u + '&travelmode=' + tm();   // sin origen: Google Maps parte de tu ubicación actual
+  }
+  function openMaps(url) { var a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); }
+
+  // ---------- GPS de alta precisión ----------
+  function gpsInfo() {
+    if (S.gps === 'unsupported') return { cls: 'bad', txt: 'Sin GPS en este equipo' };
+    if (S.gps === 'denied') return { cls: 'bad', txt: 'GPS bloqueado · toca' };
+    if (S.gps === 'off') return { cls: '', txt: 'Activar GPS' };
+    if (!S.pos) return { cls: 'warn', txt: 'Buscando señal…' };
+    var a = S.pos.acc, age = (Date.now() - S.pos.t) / 1000;
+    var base = a <= 15 ? { cls: 'good', q: 'Excelente' } : a <= 40 ? { cls: 'good', q: 'Buena' } : a <= 100 ? { cls: 'warn', q: 'Regular' } : { cls: 'bad', q: 'Baja' };
+    return { cls: age > 30 ? 'warn' : base.cls, txt: 'GPS ±' + Math.round(a) + ' m · ' + (age > 30 ? 'sin señal hace ' + Math.round(age) + ' s' : base.q) };
+  }
+  function updateLive() {
+    var chip = document.getElementById('gpsChip');
+    if (chip) { var g = gpsInfo(); chip.className = 'chip ' + g.cls; chip.innerHTML = '<span class="dot"></span>' + esc(g.txt); }
+    if (!S.route) return;
+    var sy = document.getElementById('sync');
+    if (sy) {
+      if (!S.cfg) { sy.textContent = ''; sy.className = 'sync'; }
+      else if (S.syncErr === 'token') { sy.textContent = 'Este enlace ya no es válido. Pide uno nuevo.'; sy.className = 'sync bad'; }
+      else if (S.queue.length && S.syncErr) { sy.textContent = 'Sin conexión · ' + S.queue.length + ' por enviar (se envían solas)'; sy.className = 'sync bad'; }
+      else if (S.lastSync) { var sec = Math.round((Date.now() - S.lastSync) / 1000); sy.textContent = 'Sincronizado ' + (sec < 60 ? 'hace ' + sec + ' s' : 'hace ' + Math.round(sec / 60) + ' min') + (S.queue.length ? ' · ' + S.queue.length + ' por enviar' : ''); sy.className = 'sync'; }
+      else { sy.textContent = 'Conectando con el servidor…'; sy.className = 'sync'; }
+    }
+    var cd = document.getElementById('curDist'), px = document.getElementById('prox');
+    if (S.pos && S.cur >= 0 && S.cur < S.route.s.length) {
+      var s = stop(S.cur), d = hav(S.pos, s);
+      if (cd) cd.innerHTML = '<span>Distancia </span><b class="mono">' + fmtDist(d) + '</b>';
+      if (px) px.innerHTML = (d <= 60 && S.pos.acc <= 60 && !S.status[S.cur]) ? '<div class="prox">Estás a ' + Math.round(d) + ' m de esta parada. Si ya entregaste, toca Entregado.</div>' : '';
+    } else { if (cd) cd.innerHTML = ''; if (px) px.innerHTML = ''; }
+    if (S.pos) document.querySelectorAll('[data-d]').forEach(function (e) {
+      var i = +e.getAttribute('data-d'), s = stop(i); e.textContent = fmtDist(hav(S.pos, s));
+    });
+  }
+  function startGps(fromTap) {
+    if (!navigator.geolocation) { S.gps = 'unsupported'; updateLive(); return; }
+    if (S.watch != null) { if (fromTap && S.gps === 'denied') { /* el usuario debe cambiarlo en ajustes */ } }
+    if (S.watch != null) navigator.geolocation.clearWatch(S.watch);
+    S.gps = 'search'; updateLive();
+    S.watch = navigator.geolocation.watchPosition(function (p) {
+      S.pos = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() };
+      S.gps = 'on'; updateLive();
+    }, function (e) {
+      if (e.code === 1) { S.gps = 'denied'; showGpsHelp(); } else { S.gps = S.pos ? 'on' : 'search'; }
+      updateLive();
+    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+    requestWake();
+  }
+  function showGpsHelp() {
+    var box = $('#modal'); box.hidden = false;
+    box.innerHTML = '<div class="box"><h3>Activa tu ubicación</h3><p class="muted">Para ver la distancia a cada parada, permite el acceso a la ubicación de este sitio en los ajustes del navegador y elige ubicación precisa. Después toca el botón del GPS.</p><button class="primary" id="mOk">Entendido</button></div>';
+    $('#mOk').addEventListener('click', function () { box.hidden = true; });
+  }
+  function requestWake() {
+    try {
+      if ('wakeLock' in navigator && !S.wake) {
+        navigator.wakeLock.request('screen').then(function (w) { S.wake = w; w.addEventListener('release', function () { S.wake = null; }); }, function () { /* no disponible */ });
+      }
+    } catch (e) { /* sin wake lock */ }
+  }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && S.gps !== 'off') requestWake(); });
+  setInterval(function () { if (S.route) updateLive(); }, 5000);
+
+  // ---------- Compartir y copiar ----------
+  function csvCell(v) { v = String(v == null ? '' : v); return /[",\n;]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  function reportCsv() {
+    var rows = [['chofer', 'orden', 'id_envio', 'cliente', 'estado', 'motivo', 'hora', 'lat_registro', 'lon_registro', 'precision_m']];
+    S.route.s.forEach(function (a, i) {
+      var st = S.status[i], t = st ? new Date(st.t) : null;
+      rows.push([S.route.c, i + 1, a[0], a[1], st ? (st.st === 'ok' ? 'entregado' : 'no entregado') : 'pendiente', st ? st.why : '',
+        t ? pad(t.getHours()) + ':' + pad(t.getMinutes()) + ':' + pad(t.getSeconds()) : '', st && st.lat != null ? st.lat.toFixed(6) : '', st && st.lon != null ? st.lon.toFixed(6) : '', st && st.acc != null ? st.acc : '']);
+    });
+    return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\n');
+  }
+  function summaryText() { var c = counts(); return S.route.c + ' · ' + c.ok + ' entregados, ' + c.no + ' no entregados, ' + c.pend + ' pendientes de ' + c.n; }
+  function toast(t) {
+    var box = $('#modal'); box.hidden = false;
+    box.innerHTML = '<div class="box"><h3>' + esc(t) + '</h3><button class="primary" id="mOk">Listo</button></div>';
+    $('#mOk').addEventListener('click', function () { box.hidden = true; });
+  }
+  async function copyText(txt) {
+    try { await navigator.clipboard.writeText(txt); return true; } catch (e) { return false; }
+  }
+  async function shareReport() {
+    var csv = reportCsv(), name = 'avance_' + S.route.c + '.csv';
+    try {
+      var f = new File(['﻿' + csv], name, { type: 'text/csv' });
+      if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ files: [f], title: 'Avance ' + S.route.c, text: summaryText() }); return; }
+      if (navigator.share) { await navigator.share({ title: 'Avance ' + S.route.c, text: summaryText() + '\n\n' + csv }); return; }
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+    if (await copyText(summaryText() + '\n\n' + csv)) toast('Avance copiado. Pégalo en WhatsApp o correo.');
+    else toast('No se pudo compartir ni copiar en este equipo.');
+  }
+  async function copyLoc() {
+    if (!S.pos) { toast('Aún no hay ubicación. Activa el GPS y espera la señal.'); return; }
+    var t = S.pos.lat.toFixed(6) + ', ' + S.pos.lon.toFixed(6) + ' (±' + Math.round(S.pos.acc) + ' m)';
+    toast((await copyText(t)) ? 'Ubicación copiada: ' + t : 'Tu ubicación: ' + t);
+  }
+
+  // ---------- Entrada: enlace con la ruta ----------
+  // ---------- Servidor (hoja de Google con Apps Script) ----------
+  async function postTo(url, body) {
+    var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 25000);
+    try {
+      var res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body), signal: ctl.signal });
+      if (!res.ok) throw new Error('http ' + res.status);
+      return await res.json();
+    } finally { clearTimeout(to); }
+  }
+  var flushing = false;
+  async function flush(withPos) {
+    if (!S.cfg || flushing) return;
+    var pos = withPos || S.queue.length ? S.pos : null;
+    if (!S.queue.length && !pos) return;
+    flushing = true;
+    var batch = S.queue.slice();
+    try {
+      var r = await postTo(S.cfg.u, { action: 'update', code: S.cfg.c, token: S.cfg.k, pos: pos ? { lat: pos.lat, lon: pos.lon, acc: pos.acc, t: pos.t } : null, marks: batch });
+      if (!r.ok) { if (r.error === 'token') S.syncErr = 'token'; else throw new Error(r.error || 'servidor'); }
+      else {
+        S.queue = S.queue.slice(batch.length); S.lastSync = Date.now(); S.syncErr = '';
+        if (pos) S.lastPosSent = { lat: pos.lat, lon: pos.lon, t: Date.now() };
+        save();
+      }
+    } catch (e) { S.syncErr = 'net'; }
+    flushing = false; updateLive();
+  }
+  // Cada 30 s: manda la ubicación si se movió más de 25 m, o cada 3 min aunque esté quieto; reintenta lo pendiente.
+  function tickSync() {
+    if (!S.cfg) return;
+    var due = S.queue.length > 0;
+    if (S.pos) {
+      var lp = S.lastPosSent;
+      if (!lp || Date.now() - lp.t > 180000 || hav(S.pos, lp) > 25) due = true;
+    }
+    if (due) flush(true); else updateLive();
+  }
+  setInterval(tickSync, 30000);
+  window.addEventListener('online', function () { flush(true); });
+  function cfgFromHash(h) {
+    var m = h.match(/^#g=([A-Za-z0-9_-]+)$/);
+    if (!m) return null;
+    try { var o = JSON.parse(new TextDecoder().decode(b64uDec(m[1]))); if (o && o.u && o.c && o.k) return o; } catch (e) { /* enlace dañado */ }
+    return null;
+  }
+  async function loadServerRoute(cfg) {
+    if (S.cfg && S.queue.length) { try { await flush(true); } catch (e) { /* se reintenta después */ } }
+    if (!S.route) showEmpty('Cargando tu ruta…');
+    try {
+      var r = await postTo(cfg.u, { action: 'route', code: cfg.c, token: cfg.k });
+      if (!r.ok) {
+        if (r.error === 'token') { showEmpty('Este enlace ya no es válido. Pide uno nuevo a tu supervisor.'); return; }
+        throw new Error(r.error || 'servidor');
+      }
+      var same = S.route && S.route.c === r.route.c && S.route.d === r.route.d;
+      S.cfg = cfg;
+      if (!same) { S.route = r.route; S.status = {}; S.queue = []; S.askNo = false; }
+      (r.marks || []).forEach(function (m) { if (!S.status[m.i]) S.status[m.i] = { st: m.st, why: m.why || '', t: m.t, lat: m.lat, lon: m.lon, acc: m.acc }; });
+      var n = nextPending(0); S.cur = n < 0 ? 0 : n;
+      S.lastSync = Date.now(); S.syncErr = '';
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* sin historial */ }
+      save(); render(); flush(true);
+    } catch (e) {
+      if (S.route && S.route.c === cfg.c) { S.cfg = cfg; S.syncErr = 'net'; save(); render(); }
+      else showEmpty('No se pudo cargar tu ruta. Revisa tu conexión y vuelve a abrir el mismo enlace.');
+    }
+  }
+
+  async function fromHash() {
+    var cfg = cfgFromHash(location.hash);
+    if (cfg) { await loadServerRoute(cfg); return true; }
+    var m = location.hash.match(/^#r=([A-Za-z0-9_-]+)$/);
+    if (!m) return false;
+    S.hashData = m[1];
+    try {
+      if (packIsEncrypted(S.hashData)) { showPin(); return true; }
+      acceptRoute(await unpackRoute(S.hashData, ''));
+    } catch (e) { showEmpty('El enlace está incompleto o dañado. Pide uno nuevo a tu supervisor.'); }
+    return true;
+  }
+  window.addEventListener('hashchange', fromHash);
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () { /* sin modo sin conexión */ }); });
+  }
+  load();
+  fromHash().then(function (used) { if (!used) render(); });
+  // Si el chofer ya dio permiso de ubicación antes, el GPS arranca solo.
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      navigator.permissions.query({ name: 'geolocation' }).then(function (p) { if (p.state === 'granted') startGps(false); }, function () { /* sin consulta de permisos */ });
+    }
+  } catch (e) { /* sin API de permisos */ }
+})();
+</script>
+</body>
+</html>
